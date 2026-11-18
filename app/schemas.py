@@ -9,6 +9,15 @@ class ChatRequest(BaseModel):
     )
 
 
+class Citation(BaseModel):
+    title: str
+    source: str
+    url: str
+    tool: str
+    snippet: str | None = None
+
+
 class ChatResponse(BaseModel):
     response: str
-    tools_used: list[str] = []
+    tools_used: list[str] = Field(default_factory=list)
+    citations: list[Citation] = Field(default_factory=list)
