@@ -1,9 +1,8 @@
-
+import json
 import logging
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI, HTTPException
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 
 from app.config import settings
 from app.mcp_client import (
@@ -11,7 +10,7 @@ from app.mcp_client import (
     discover_mcp_tools,
 )
 from app.agent import build_agent
-from app.schemas import ChatRequest, ChatResponse
+from app.schemas import ChatRequest, ChatResponse, Citation
 
 
 logging.basicConfig(level=logging.INFO)
@@ -43,6 +42,63 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+def extract_citation_snippet(content) -> str:
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        text_parts = []
+        for item in content:
+            if isinstance(item, dict) and isinstance(item.get("text"), str):
+                text_parts.append(item["text"])
+            elif isinstance(item, str):
+                text_parts.append(item)
+        text = "\n".join(text_parts)
+        if not text:
+            text = json.dumps(content, ensure_ascii=False)
+    else:
+        text = json.dumps(content, ensure_ascii=False)
+
+    return text[:500] if text else ""
+
+
+def extract_citations(messages) -> list[Citation]:
+    call_details = {}
+    for message in messages:
+        if isinstance(message, AIMessage):
+            for call in message.tool_calls:
+                call_details[call.get("id")] = call
+
+    citations = []
+    seen = set()
+
+    for message in messages:
+        if not isinstance(message, ToolMessage):
+            continue
+
+        tool_name = message.name or call_details.get(
+            message.tool_call_id,
+            {},
+        ).get("name", "MCP tool")
+
+        key = (message.tool_call_id, tool_name)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        snippet = extract_citation_snippet(message.content)
+        citations.append(
+            Citation(
+                title=f"{tool_name} result",
+                source="StateInfoMCP",
+                url=settings.stateinfo_mcp_url,
+                tool=tool_name,
+                snippet=snippet or None,
+            )
+        )
+
+    return citations
 
 
 @app.get("/health")
@@ -89,6 +145,8 @@ async def chat(request: ChatRequest):
             for call in msg.tool_calls
         ]
 
+        citations = extract_citations(messages)
+
         final_message = messages[-1]
 
         content = final_message.content
@@ -100,6 +158,7 @@ async def chat(request: ChatRequest):
         return ChatResponse(
             response=answer,
             tools_used=tools_used,
+            citations=citations,
         )
 
     except Exception:
