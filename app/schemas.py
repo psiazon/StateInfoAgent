@@ -8,14 +8,12 @@ class ChatRequest(BaseModel):
         max_length=4000
     )
 
-
 class Citation(BaseModel):
     title: str
     source: str
-    url: str
+    url: str | None = None
     tool: str
     snippet: str | None = None
-
 
 class ChatResponse(BaseModel):
     response: str
