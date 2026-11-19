@@ -71,56 +71,149 @@ def extract_citation_snippet(content) -> str:
     return text[:500] if text else ""
 
 
-def extract_citations(messages) -> list[Citation]:
-    call_details = {}
-    for message in messages:
-        if isinstance(message, AIMessage):
-            for call in message.tool_calls:
-                call_details[call.get("id")] = call
 
+def extract_citations(messages) -> list[Citation]:
     citations = []
     seen = set()
+
+    # Map tool call IDs to tool names.
+    call_details = {}
+
+    for message in messages:
+        if isinstance(message, AIMessage):
+            for call in message.tool_calls or []:
+                call_id = call.get("id")
+                if call_id:
+                    call_details[call_id] = call.get("name")
 
     for message in messages:
         if not isinstance(message, ToolMessage):
             continue
 
-        tool_name = message.name or call_details.get(
+        tool_name = (
+            call_details.get(message.tool_call_id)
+            or message.name
+            or "Unknown tool"
+        )
+
+        logger.info(
+            "Processing citation | tool=%s | call_id=%s",
+            tool_name,
             message.tool_call_id,
-            {},
-        ).get("name", "MCP tool")
+        )
 
-        key = (message.tool_call_id, tool_name)
-        if key in seen:
-            continue
-        seen.add(key)
-
-        snippet = extract_citation_snippet(message.content)
-        is_search = tool_name == "search_company_documents"
-        if is_search:
+        # Azure AI Search citations
+        if tool_name == "search_company_documents":
             try:
-                payload = json.loads(message.content)
-                for doc in payload.get("results", []):
-                    title = doc.get("title") or "Indexed company document"
-                    citations.append(Citation(
-                        title=title,
-                        source="Azure AI Search",
-                        url=None,
-                        tool=tool_name,
-                        snippet=str(doc.get("content", ""))[:500] or None,
-                    ))
-            except (ValueError, TypeError):
-                pass
+                raw_content = message.content
+
+                if isinstance(raw_content, str):
+                    payload = json.loads(raw_content)
+
+                elif isinstance(raw_content, list):
+                    text = "\n".join(
+                        item.get("text", "")
+                        if isinstance(item, dict)
+                        else item
+                        for item in raw_content
+                        if isinstance(item, (dict, str))
+                    )
+                    payload = json.loads(text)
+
+                elif isinstance(raw_content, dict):
+                    payload = raw_content
+
+                else:
+                    logger.warning(
+                        "Unsupported search result type: %s",
+                        type(raw_content).__name__,
+                    )
+                    continue
+
+                if not isinstance(payload, dict):
+                    logger.warning(
+                        "Search result is not a JSON object"
+                    )
+                    continue
+
+                if payload.get("error"):
+                    logger.warning(
+                        "Search tool returned error: %s",
+                        payload["error"],
+                    )
+                    continue
+
+                documents = payload.get("results", [])
+
+                logger.info(
+                    "Found %d search citation candidates",
+                    len(documents),
+                )
+
+                for doc in documents:
+                    if not isinstance(doc, dict):
+                        continue
+
+                    title = doc.get("title")
+                    chunk_id = doc.get("chunk_id")
+
+                    if not title:
+                        continue
+
+                    key = (title, chunk_id)
+
+                    if key in seen:
+                        continue
+
+                    seen.add(key)
+
+                    citations.append(
+                        Citation(
+                            title=title,
+                            source="Azure AI Search",
+                            url=None,
+                            tool=tool_name,
+                            snippet=str(
+                                doc.get("content", "")
+                            )[:500] or None,
+                        )
+                    )
+
+            except (ValueError, TypeError) as exc:
+                logger.warning(
+                    "Unable to parse Azure AI Search citations: %s",
+                    exc,
+                )
+
+        # MCP citations
         else:
+            key = (
+                "mcp",
+                message.tool_call_id,
+                tool_name,
+            )
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+
             citations.append(
                 Citation(
                     title=f"{tool_name} result",
                     source="StateInfoMCP",
                     url=settings.stateinfo_mcp_url,
                     tool=tool_name,
-                    snippet=snippet or None,
+                    snippet=extract_citation_snippet(
+                        message.content
+                    ) or None,
                 )
             )
+
+    logger.info(
+        "Extracted %d citations",
+        len(citations),
+    )
 
     return citations
 
