@@ -9,3 +9,4 @@ mcp
 azure-identity
 python-dotenv
 pydantic-settings
+azure-search-documents>=11.6,<12
