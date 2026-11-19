@@ -10,6 +10,7 @@ from app.mcp_client import (
     discover_mcp_tools,
 )
 from app.agent import build_agent
+from app.search_tool import create_search_tool
 from app.schemas import ChatRequest, ChatResponse, Citation
 
 
@@ -23,6 +24,13 @@ async def lifespan(app: FastAPI):
 
     client = create_mcp_client()
     tools = await discover_mcp_tools(client)
+
+    search_tool = create_search_tool()
+    if search_tool is not None:
+        tools.append(search_tool)
+        logger.info("Azure AI Search hybrid retrieval enabled")
+    else:
+        logger.info("Azure AI Search not configured; MCP-only mode")
 
     app.state.agent = build_agent(tools)
     app.state.tool_names = [tool.name for tool in tools]
@@ -88,15 +96,31 @@ def extract_citations(messages) -> list[Citation]:
         seen.add(key)
 
         snippet = extract_citation_snippet(message.content)
-        citations.append(
-            Citation(
-                title=f"{tool_name} result",
-                source="StateInfoMCP",
-                url=settings.stateinfo_mcp_url,
-                tool=tool_name,
-                snippet=snippet or None,
+        is_search = tool_name == "search_company_documents"
+        if is_search:
+            try:
+                payload = json.loads(message.content)
+                for doc in payload.get("results", []):
+                    title = doc.get("title") or "Indexed company document"
+                    citations.append(Citation(
+                        title=title,
+                        source="Azure AI Search",
+                        url=None,
+                        tool=tool_name,
+                        snippet=str(doc.get("content", ""))[:500] or None,
+                    ))
+            except (ValueError, TypeError):
+                pass
+        else:
+            citations.append(
+                Citation(
+                    title=f"{tool_name} result",
+                    source="StateInfoMCP",
+                    url=settings.stateinfo_mcp_url,
+                    tool=tool_name,
+                    snippet=snippet or None,
+                )
             )
-        )
 
     return citations
 

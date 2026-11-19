@@ -13,6 +13,14 @@ class Settings(BaseSettings):
     stateinfo_mcp_transport: str = "http"
     stateinfo_mcp_token: str | None = None
 
+    azure_search_endpoint: str | None = None
+    azure_search_index_name: str = "rag-1795046232229"
+    azure_search_vector_field: str = "text_vector"
+    azure_search_content_field: str = "chunk"
+    azure_search_title_field: str = "title"
+    azure_search_k: int = 30
+    azure_search_top: int = 30
+
     agent_max_steps: int = 12
 
     model_config = SettingsConfigDict(
