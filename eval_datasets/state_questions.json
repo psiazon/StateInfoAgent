@@ -2,7 +2,7 @@
   {
     "id": "STATE-001",
     "question": "What is the capital of Illinois?",
-    "expected_keywords": ["Chicago"],
+    "expected_keywords": ["Springfield"],
     "requires_tool": true
   },
   {
