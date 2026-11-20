@@ -24,7 +24,7 @@ Rules:
 """
 
 
-def build_agent(tools):
+def build_agent(tools, checkpointer):
     llm = create_llm()
 
     return create_agent(
@@ -32,4 +32,5 @@ def build_agent(tools):
         tools=tools,
         system_prompt=SYSTEM_PROMPT,
         name="StateInfoAgent",
+        checkpointer=checkpointer,
     )
