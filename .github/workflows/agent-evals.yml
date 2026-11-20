@@ -1,0 +1,54 @@
+
+name: StateInfoAgent Evals
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  evals:
+    name: Evaluate StateInfoAgent
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-evals.txt
+
+      - name: Verify agent health
+        env:
+          AGENT_EVAL_URL: ${{ vars.AGENT_EVAL_URL }}
+        run: |
+          python -c "import os,httpx; r=httpx.get(os.environ['AGENT_EVAL_URL'].rstrip('/')+'/health',timeout=30); r.raise_for_status(); print('Agent healthy')"
+
+      - name: Run AI evaluations
+        env:
+          AGENT_EVAL_URL: ${{ vars.AGENT_EVAL_URL }}
+        run: |
+          python -m pytest evals/ -v \
+            --html=eval-report.html \
+            --self-contained-html \
+            --junitxml=eval-results.xml
+
+      - name: Upload evaluation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stateinfoagent-eval-results
+          path: |
+            eval-report.html
+            eval-results.xml
+          if-no-files-found: warn
