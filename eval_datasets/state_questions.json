@@ -1,0 +1,26 @@
+[
+  {
+    "id": "STATE-001",
+    "question": "What is the capital of Illinois?",
+    "expected_keywords": ["Springfield"],
+    "requires_tool": true
+  },
+  {
+    "id": "STATE-002",
+    "question": "What is the capital of California?",
+    "expected_keywords": ["Sacramento"],
+    "requires_tool": true
+  },
+  {
+    "id": "STATE-003",
+    "question": "What is the abbreviation for Texas?",
+    "expected_keywords": ["TX"],
+    "requires_tool": true
+  },
+  {
+    "id": "STATE-004",
+    "question": "What is the capital of Florida?",
+    "expected_keywords": ["Tallahassee"],
+    "requires_tool": true
+  }
+]

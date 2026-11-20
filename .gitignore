@@ -1,4 +1,3 @@
-
 .venv/
 __pycache__/
 *.pyc
@@ -6,4 +5,8 @@ __pycache__/
 .env.*
 !.env.example
 .vscode/
+.pytest_cache/
+.env
+eval-report.html
+eval-results.xml
 .pytest_cache/

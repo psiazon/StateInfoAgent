@@ -1,6 +1,8 @@
 import json
+import uuid
 import logging
 from contextlib import asynccontextmanager
+from langgraph.checkpoint.memory import InMemorySaver
 from fastapi import FastAPI, HTTPException
 from langchain_core.messages import AIMessage, ToolMessage
 
@@ -32,17 +34,28 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Azure AI Search not configured; MCP-only mode")
 
-    app.state.agent = build_agent(tools)
-    app.state.tool_names = [tool.name for tool in tools]
-
-    logger.info(
-        "Loaded %s MCP tools",
-        len(tools),
-    )
-
-    yield
+    # In-memory mode is for local testing only; Azure deployments should use postgres.
+    if settings.memory_backend == "postgres":
+        if not settings.postgres_connection_string:
+            raise RuntimeError("POSTGRES_CONNECTION_STRING is required for postgres memory")
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        async with AsyncPostgresSaver.from_conn_string(settings.postgres_connection_string) as checkpointer:
+            await checkpointer.setup()
+            app.state.agent = build_agent(tools, checkpointer)
+            app.state.tool_names = [tool.name for tool in tools]
+            yield
+    elif settings.memory_backend == "memory":
+        app.state.agent = build_agent(tools, InMemorySaver())
+        app.state.tool_names = [tool.name for tool in tools]
+        yield
+    else:
+        raise RuntimeError("MEMORY_BACKEND must be memory or postgres")
 
     logger.info("StateInfoAgent shutting down")
+
+    # Startup and shutdown handled above.
+    return
+
 
 
 app = FastAPI(
@@ -239,6 +252,11 @@ async def get_tools():
 )
 async def chat(request: ChatRequest):
     try:
+        thread_id = request.thread_id or str(uuid.uuid4())
+        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": settings.agent_max_steps}
+        prior_state = await app.state.agent.aget_state(config)
+        prior_count = len(prior_state.values.get("messages", [])) if prior_state.values else 0
+
         result = await app.state.agent.ainvoke(
             {
                 "messages": [
@@ -248,21 +266,22 @@ async def chat(request: ChatRequest):
                     }
                 ]
             },
-            config={
-                "recursion_limit": settings.agent_max_steps
-            },
+            config=config,
         )
 
         messages = result["messages"]
 
+        # Only report tools and citations from this turn, not the whole saved thread.
+        current_messages = messages[prior_count:]
+
         tools_used = [
             call["name"]
-            for msg in messages
+            for msg in current_messages
             if isinstance(msg, AIMessage)
             for call in msg.tool_calls
         ]
 
-        citations = extract_citations(messages)
+        citations = extract_citations(current_messages)
 
         final_message = messages[-1]
 
@@ -273,6 +292,7 @@ async def chat(request: ChatRequest):
             answer = str(content)
 
         return ChatResponse(
+            thread_id=thread_id,
             response=answer,
             tools_used=tools_used,
             citations=citations,

@@ -10,3 +10,4 @@ azure-identity
 python-dotenv
 pydantic-settings
 azure-search-documents>=11.6,<12
+langgraph-checkpoint-postgres>=2.0,<4.0

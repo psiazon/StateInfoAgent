@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     azure_search_k: int = 30
     azure_search_top: int = 30
 
+    memory_backend: str = "memory"  # memory or postgres
+    postgres_connection_string: str | None = None
+
     agent_max_steps: int = 12
 
     model_config = SettingsConfigDict(

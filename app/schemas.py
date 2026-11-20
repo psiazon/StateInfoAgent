@@ -3,9 +3,10 @@ from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(
-        min_length=1,
-        max_length=4000
+    message: str
+    thread_id: str | None = Field(
+        default=None,
+        description="Conversation ID used by LangGraph memory"
     )
 
 class Citation(BaseModel):
@@ -16,6 +17,7 @@ class Citation(BaseModel):
     snippet: str | None = None
 
 class ChatResponse(BaseModel):
+    thread_id: str
     response: str
     tools_used: list[str] = Field(default_factory=list)
     citations: list[Citation] = Field(default_factory=list)
