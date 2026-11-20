@@ -17,7 +17,7 @@ class Citation(BaseModel):
     snippet: str | None = None
 
 class ChatResponse(BaseModel):
-    thread_id: str
+    thread_id: str | None = None
     response: str
     tools_used: list[str] = Field(default_factory=list)
     citations: list[Citation] = Field(default_factory=list)
