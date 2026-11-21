@@ -4,6 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 from langgraph.checkpoint.memory import InMemorySaver
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.messages import AIMessage, ToolMessage
 
 from app.config import settings
@@ -64,6 +65,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Allow StateInfoChatBot to communicate with StateInfoAgent
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        # Local React development
+        "http://localhost:5173",
+
+        # Production Azure StateInfoChatBot
+        "https://stateinfochatbot-ebhweeanakf3bgc3.westcentralus-01.azurewebsites.net",
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+)
 
 def extract_citation_snippet(content) -> str:
     if isinstance(content, str):
